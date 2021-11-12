@@ -1,0 +1,16 @@
+{
+    "name": "lyly/plasgate",
+    "description": "This is a opt app",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "SophanonChhoun",
+            "email": "sophanon.chhoun@niptict.edu.kh"
+        }
+    ],
+    "require": {
+        "php": "^7.1",
+        "guzzlehttp/guzzle": "^5.3 || ^6.5 || ^7.2",
+        "illuminate/support": "^5.0 || ^6.0 || ^7.0 || ^8.0"
+    }
+}
