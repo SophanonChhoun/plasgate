@@ -4,58 +4,85 @@
 namespace Lyly\Plasgate;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\RequestOptions;
 use Illuminate\Support\Facades\Log;
 
 class Plasgate
 {
-    public $token;
-    public $senderId;
-    public $base_url;
-    public $client;
 
-    public function __construct()
+    protected $method;
+    protected $params;
+    protected $key_param;
+
+    public function sendSms($text, $phone_number)
     {
-        $this->token = config('plasgate.token');
-        $this->senderId = config('plasgate.sender_id');
-        $this->base_url = config('plasgate.base_url');
-        $this->client = new Client();
+        $this->params['text'] = $text;
+
+        if(is_string($phone_number))
+            $this->params['number'] = $phone_number;
+        else if(is_array($phone_number))
+            $this->params['number'] = implode(',', $phone_number);
+
+        return $this->request(true);
     }
 
-    public function send($phone, $text)
+    public function request($is_array = false)
     {
-        Log::info("SEND SMS TO: $phone");
         try {
-            $token = $this->token;
-            $senderID = $this->senderId;
-            $baseUrl = $this->base_url;
-            return $this->client->request("GET", "$baseUrl?token=$token&phone=$phone&senderID=$senderID&text=$text", [
-                "headers" => [
-                    "Content-Type" => "application/json"
+            $request = new Client([
+                'headers' => [
+                    'Accept' => 'application/json'
+                ],
+                'http_errors' => false,
+                'verify' => false
+            ]);
+
+            $response = $request->post(config('plasgate.url') . 'authorize', [
+                RequestOptions::JSON => [
+                    'username' => config('plasgate.username'),
+                    'password' => config('plasgate.password'),
                 ]
             ]);
-        } catch (\Exception $exception) {
-            Log::info("SMS RESPONSE: ", [
-                'code' => $exception->getCode(),
-                'body' => $exception->getMessage(),
+
+            $response = json_decode($response->getBody(), $is_array);
+
+            if(!isset($response['status']))
+                return false;
+
+            $response = $request->post(config('plasgate.url') . 'accesstoken', [
+                RequestOptions::JSON => [
+                    'authorization_code' => $response['data']['authorization_code'],
+                ]
             ]);
-            throw new \ErrorException($exception->getMessage());
-        }
-    }
 
-    public function randomOtpNumber($digit)
-    {
-        return rand(pow(10, $digit - 1), pow(10, $digit) - 1);
-    }
+            $response = json_decode($response->getBody(), $is_array);
 
-    public function sendArraySms($sends)
-    {
-        try {
-            foreach ($sends as $send)
-            {
-                $this->send($send['phone'], $send['message']);
-            }
-        }catch (\Exception $exception) {
-            throw new \ErrorException($exception->getMessage());
+            if(!isset($response['status']))
+                return false;
+
+            $response = $request->post(config('plasgate.url') . 'send', [
+                RequestOptions::JSON => [
+                    [
+                        'number' => $this->params['number'],
+                        'senderID' => config('plasgate.sender_id'),
+                        'type' => 'sms',
+                        'text' => $this->params['text']
+                    ]
+                ],
+                'headers' => [
+                    'X-Access-Token' => $response['data']['access_token']
+                ]
+            ]);
+
+            $response = json_decode($response->getBody(), $is_array);
+
+            if(!isset($response['status']))
+                return false;
+
+            return $response;
+        } catch (ConnectException $e) {
+            return null;
         }
     }
 
